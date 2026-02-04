@@ -5,7 +5,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A production-ready Model Context Protocol (MCP) server for fetching real-time option chain data from Interactive Brokers (IBKR). Built with FastAPI, featuring automatic session management, comprehensive error handling, and full Docker support.
+A production-ready Model Context Protocol (MCP) server for fetching real-time option chain data from Interactive Brokers (IBKR). Built with FastMCP, featuring automatic session management, comprehensive error handling, and full Docker support.
 
 ## Features
 

@@ -1,13 +1,9 @@
-"""MCP server for IBKR option chain data fetching."""
+"""MCP server for IBKR option chain data fetching using FastMCP."""
 
-import json
 import logging
-from contextlib import asynccontextmanager
-from typing import Any, Dict, List
+from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from fastmcp import FastMCP
 
 from .config import settings
 from .session_manager import session_manager
@@ -19,10 +15,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Initialize FastMCP server
+mcp = FastMCP(
+    "MCP IBKR Options",
+    version="0.1.0",
+    description="MCP server for fetching Interactive Brokers option chain data",
+)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifecycle manager for the FastAPI application."""
+
+# ============================================================================
+# Lifecycle Management
+# ============================================================================
+
+
+@mcp.lifespan
+async def lifespan():
+    """Manage server lifecycle."""
     logger.info("Starting MCP IBKR Options server")
     await session_manager.start()
     yield
@@ -30,364 +38,80 @@ async def lifespan(app: FastAPI):
     await session_manager.stop()
 
 
-app = FastAPI(
-    title="MCP IBKR Options",
-    description="MCP server for fetching Interactive Brokers option chain data via streamable HTTP",
-    version="0.1.0",
-    lifespan=lifespan,
-)
-
-
 # ============================================================================
-# MCP Protocol Models
+# MCP Tools
 # ============================================================================
 
 
-class MCPRequest(BaseModel):
-    """Base MCP request model."""
-
-    jsonrpc: str = "2.0"
-    id: int | str
-    method: str
-    params: Dict[str, Any] = Field(default_factory=dict)
-
-
-class MCPResponse(BaseModel):
-    """Base MCP response model."""
-
-    jsonrpc: str = "2.0"
-    id: int | str
-    result: Dict[str, Any] | None = None
-    error: Dict[str, Any] | None = None
-
-
-class MCPError(BaseModel):
-    """MCP error model."""
-
-    code: int
-    message: str
-    data: Any = None
-
-
-# ============================================================================
-# MCP Tool Definitions
-# ============================================================================
-
-TOOLS = [
-    {
-        "name": "create_session",
-        "description": (
-            "Create a new IBKR session. This must be called first before using other tools. "
-            "Returns a session_id that must be included in subsequent requests."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        },
-    },
-    {
-        "name": "delete_session",
-        "description": "Delete an existing IBKR session and clean up resources.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "session_id": {
-                    "type": "string",
-                    "description": "The session ID to delete",
-                }
-            },
-            "required": ["session_id"],
-        },
-    },
-    {
-        "name": "get_underlying_price",
-        "description": (
-            "Get the current price of an underlying symbol (stock or index). "
-            "Tries Yahoo Finance first (free), falls back to IBKR market data."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "session_id": {
-                    "type": "string",
-                    "description": "The session ID from create_session",
-                },
-                "symbol": {
-                    "type": "string",
-                    "description": "Underlying symbol (e.g., SPY, AAPL, SPX)",
-                },
-            },
-            "required": ["session_id", "symbol"],
-        },
-    },
-    {
-        "name": "fetch_option_chain",
-        "description": (
-            "Fetch complete option chain data for a symbol with market data and Greeks. "
-            "Returns comprehensive data including bid/ask, volume, open interest, "
-            "delta, gamma, theta, vega, and implied volatility."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "session_id": {
-                    "type": "string",
-                    "description": "The session ID from create_session",
-                },
-                "symbol": {
-                    "type": "string",
-                    "description": "Underlying symbol (e.g., SPY, AAPL, SPX)",
-                },
-                "strike_count": {
-                    "type": "integer",
-                    "description": (
-                        "Number of strikes above and below current price (default: 20)"
-                    ),
-                },
-                "expiration_days": {
-                    "type": "array",
-                    "items": {"type": "integer"},
-                    "description": (
-                        "List of days from today for expirations (e.g., [0, 1, 7, 14, 30]). "
-                        "If not specified, returns all available expirations."
-                    ),
-                },
-            },
-            "required": ["session_id", "symbol"],
-        },
-    },
-    {
-        "name": "get_session_stats",
-        "description": (
-            "Get statistics about all active sessions, including connection status "
-            "and last access times. Useful for debugging and monitoring."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        },
-    },
-    {
-        "name": "health_check",
-        "description": (
-            "Check the health status of the MCP server and IBKR connection. "
-            "Verifies that the server is running and can connect to IBKR."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "session_id": {
-                    "type": "string",
-                    "description": "Optional session ID to check specific session health",
-                }
-            },
-            "required": [],
-        },
-    },
-]
-
-
-# ============================================================================
-# MCP Protocol Endpoints
-# ============================================================================
-
-
-@app.get("/")
-async def root() -> Dict[str, str]:
-    """Root endpoint with server info."""
-    return {
-        "name": "MCP IBKR Options",
-        "version": "0.1.0",
-        "description": "MCP server for fetching Interactive Brokers option chain data",
-        "protocol": "streamable-http",
-        "endpoints": {
-            "/mcp": "Main MCP endpoint (supports streaming via Accept: text/event-stream or x-mcp-stream: true)",
-            "/health": "Health check endpoint",
-        }
-    }
-
-
-@app.get("/health")
-async def health() -> Dict[str, Any]:
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "timestamp": __import__("datetime").datetime.now().isoformat(),
-        "sessions": len(session_manager.sessions),
-    }
-
-
-@app.post("/mcp")
-async def mcp_endpoint(request: Request) -> JSONResponse | StreamingResponse:
+@mcp.tool()
+async def create_session() -> dict[str, Any]:
     """
-    Main MCP endpoint supporting both regular and streamable HTTP protocol.
+    Create a new IBKR session.
 
-    For streaming responses, returns newline-delimited JSON messages.
-    For non-streaming responses, returns a single JSON object.
+    This must be called first before using other tools.
+    Returns a session_id that must be included in subsequent requests.
+
+    Returns:
+        Dictionary containing session_id and confirmation message
     """
-    try:
-        body = await request.json()
-        mcp_request = MCPRequest(**body)
-
-        logger.debug(f"Received MCP request: {mcp_request.method}")
-
-        # Check if client wants streaming response
-        accept_header = request.headers.get("accept", "")
-        is_streaming = "text/event-stream" in accept_header or \
-                       request.headers.get("x-mcp-stream") == "true"
-
-        # Route to appropriate handler
-        if mcp_request.method == "tools/list":
-            result = {"tools": TOOLS}
-        elif mcp_request.method == "tools/call":
-            result = await handle_tool_call(mcp_request.params)
-        else:
-            error_response = MCPResponse(
-                jsonrpc="2.0",
-                id=mcp_request.id,
-                error=MCPError(
-                    code=-32601,
-                    message=f"Method not found: {mcp_request.method}",
-                ).model_dump(),
-            )
-            if is_streaming:
-                async def error_stream():
-                    yield json.dumps(error_response.model_dump()) + "\n"
-                return StreamingResponse(
-                    error_stream(),
-                    media_type="application/x-ndjson",
-                    status_code=404,
-                )
-            else:
-                return JSONResponse(
-                    content=error_response.model_dump(),
-                    status_code=404,
-                )
-
-        response = MCPResponse(jsonrpc="2.0", id=mcp_request.id, result=result)
-
-        # Return streaming or regular response based on client preference
-        if is_streaming:
-            async def response_stream():
-                # Send the response as newline-delimited JSON
-                yield json.dumps(response.model_dump()) + "\n"
-
-            return StreamingResponse(
-                response_stream(),
-                media_type="application/x-ndjson",
-            )
-        else:
-            return JSONResponse(content=response.model_dump())
-
-    except Exception as e:
-        logger.error(f"Error handling MCP request: {e}", exc_info=True)
-        error_response = MCPResponse(
-            jsonrpc="2.0",
-            id=getattr(body, "id", 0) if "body" in locals() else 0,
-            error=MCPError(code=-32603, message=str(e)).model_dump(),
-        )
-
-        # For errors, always return non-streaming response
-        return JSONResponse(
-            content=error_response.model_dump(),
-            status_code=500,
-        )
-
-
-# ============================================================================
-# Tool Handlers
-# ============================================================================
-
-
-async def handle_tool_call(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Handle MCP tool calls."""
-    tool_name = params.get("name")
-    arguments = params.get("arguments", {})
-
-    logger.info(f"Calling tool: {tool_name} with arguments: {arguments}")
-
-    try:
-        if tool_name == "create_session":
-            return await tool_create_session()
-        elif tool_name == "delete_session":
-            return await tool_delete_session(arguments)
-        elif tool_name == "get_underlying_price":
-            return await tool_get_underlying_price(arguments)
-        elif tool_name == "fetch_option_chain":
-            return await tool_fetch_option_chain(arguments)
-        elif tool_name == "get_session_stats":
-            return await tool_get_session_stats()
-        elif tool_name == "health_check":
-            return await tool_health_check(arguments)
-        else:
-            raise ValueError(f"Unknown tool: {tool_name}")
-
-    except Exception as e:
-        logger.error(f"Error executing tool {tool_name}: {e}", exc_info=True)
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": f"Error: {str(e)}",
-                }
-            ],
-            "isError": True,
-        }
-
-
-async def tool_create_session() -> Dict[str, Any]:
-    """Create a new IBKR session."""
     session_id = session_manager.create_session()
+    logger.info(f"Created new session: {session_id}")
+
     return {
-        "content": [
-            {
-                "type": "text",
-                "text": (
-                    f"Created new session: {session_id}\n\n"
-                    f"Use this session_id in subsequent tool calls. "
-                    f"Session will expire after {settings.session_timeout_minutes} "
-                    f"minutes of inactivity."
-                ),
-            }
-        ],
         "session_id": session_id,
+        "message": (
+            f"Created new session: {session_id}\n\n"
+            f"Use this session_id in subsequent tool calls. "
+            f"Session will expire after {settings.session_timeout_minutes} "
+            f"minutes of inactivity."
+        ),
     }
 
 
-async def tool_delete_session(arguments: Dict[str, Any]) -> Dict[str, Any]:
-    """Delete an IBKR session."""
-    session_id = arguments.get("session_id")
-    if not session_id:
-        raise ValueError("session_id is required")
+@mcp.tool()
+async def delete_session(session_id: str) -> dict[str, Any]:
+    """
+    Delete an existing IBKR session and clean up resources.
 
+    Args:
+        session_id: The session ID to delete
+
+    Returns:
+        Dictionary containing confirmation message
+    """
     success = session_manager.delete_session(session_id)
+
     if success:
+        logger.info(f"Deleted session: {session_id}")
         return {
-            "content": [
-                {"type": "text", "text": f"Successfully deleted session: {session_id}"}
-            ]
+            "success": True,
+            "message": f"Successfully deleted session: {session_id}",
         }
     else:
+        logger.warning(f"Attempted to delete non-existent session: {session_id}")
         return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": f"Session not found or already deleted: {session_id}",
-                }
-            ]
+            "success": False,
+            "message": f"Session not found or already deleted: {session_id}",
         }
 
 
-async def tool_get_underlying_price(arguments: Dict[str, Any]) -> Dict[str, Any]:
-    """Get the current price of an underlying symbol."""
-    session_id = arguments.get("session_id")
-    symbol = arguments.get("symbol")
+@mcp.tool()
+async def get_underlying_price(session_id: str, symbol: str) -> dict[str, Any]:
+    """
+    Get the current price of an underlying symbol.
 
-    if not session_id or not symbol:
-        raise ValueError("session_id and symbol are required")
+    Tries Yahoo Finance first (free), falls back to IBKR market data.
 
+    Args:
+        session_id: The session ID from create_session
+        symbol: Underlying symbol (e.g., SPY, AAPL, SPX)
+
+    Returns:
+        Dictionary containing current price and symbol
+
+    Raises:
+        ValueError: If session is invalid or symbol price cannot be fetched
+    """
     session = session_manager.get_session(session_id)
     if not session:
         raise ValueError(
@@ -398,35 +122,47 @@ async def tool_get_underlying_price(arguments: Dict[str, Any]) -> Dict[str, Any]
     price = client.get_underlying_price(symbol)
 
     if price is None:
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": f"Could not fetch price for {symbol}. "
-                    f"Check that the symbol is valid and market data is available.",
-                }
-            ]
-        }
+        raise ValueError(
+            f"Could not fetch price for {symbol}. "
+            f"Check that the symbol is valid and market data is available."
+        )
+
+    logger.info(f"Fetched price for {symbol}: ${price:.2f}")
 
     return {
-        "content": [
-            {"type": "text", "text": f"{symbol} current price: ${price:.2f}"}
-        ],
-        "price": price,
         "symbol": symbol,
+        "price": price,
+        "message": f"{symbol} current price: ${price:.2f}",
     }
 
 
-async def tool_fetch_option_chain(arguments: Dict[str, Any]) -> Dict[str, Any]:
-    """Fetch option chain data."""
-    session_id = arguments.get("session_id")
-    symbol = arguments.get("symbol")
-    strike_count = arguments.get("strike_count")
-    expiration_days = arguments.get("expiration_days")
+@mcp.tool()
+async def fetch_option_chain(
+    session_id: str,
+    symbol: str,
+    strike_count: int | None = None,
+    expiration_days: list[int] | None = None,
+) -> dict[str, Any]:
+    """
+    Fetch complete option chain data for a symbol.
 
-    if not session_id or not symbol:
-        raise ValueError("session_id and symbol are required")
+    Returns comprehensive data including bid/ask, volume, open interest,
+    delta, gamma, theta, vega, and implied volatility.
 
+    Args:
+        session_id: The session ID from create_session
+        symbol: Underlying symbol (e.g., SPY, AAPL, SPX)
+        strike_count: Number of strikes above and below current price (default: 20)
+        expiration_days: Array of days from today for expirations
+                        (e.g., [0, 1, 7, 14, 30]). If not specified,
+                        returns all available expirations.
+
+    Returns:
+        Dictionary containing complete option chain data
+
+    Raises:
+        ValueError: If session is invalid or option chain cannot be fetched
+    """
     session = session_manager.get_session(session_id)
     if not session:
         raise ValueError(
@@ -440,7 +176,13 @@ async def tool_fetch_option_chain(arguments: Dict[str, Any]) -> Dict[str, Any]:
         expiration_days=expiration_days,
     )
 
-    summary = (
+    logger.info(
+        f"Fetched option chain for {symbol}: {data['total_contracts']} contracts "
+        f"({data['calls']} calls, {data['puts']} puts)"
+    )
+
+    # Add summary message
+    data["message"] = (
         f"Successfully fetched option chain for {symbol}\n\n"
         f"Underlying Price: ${data['underlying_price']:.2f}\n"
         f"Total Contracts: {data['total_contracts']}\n"
@@ -451,17 +193,22 @@ async def tool_fetch_option_chain(arguments: Dict[str, Any]) -> Dict[str, Any]:
         f"delta, gamma, theta, vega, implied volatility"
     )
 
-    return {
-        "content": [
-            {"type": "text", "text": summary},
-        ],
-        "data": data,
-    }
+    return data
 
 
-async def tool_get_session_stats() -> Dict[str, Any]:
-    """Get session statistics."""
+@mcp.tool()
+async def get_session_stats() -> dict[str, Any]:
+    """
+    Get statistics about all active sessions.
+
+    Includes connection status and last access times.
+    Useful for debugging and monitoring.
+
+    Returns:
+        Dictionary containing session statistics
+    """
     stats = session_manager.get_stats()
+
     summary = (
         f"Session Statistics\n"
         f"{'=' * 50}\n"
@@ -479,19 +226,28 @@ async def tool_get_session_stats() -> Dict[str, Any]:
     else:
         summary += "No active sessions\n"
 
-    return {
-        "content": [{"type": "text", "text": summary}],
-        "stats": stats,
-    }
+    stats["message"] = summary
+    return stats
 
 
-async def tool_health_check(arguments: Dict[str, Any]) -> Dict[str, Any]:
-    """Perform health check."""
-    session_id = arguments.get("session_id")
+@mcp.tool()
+async def health_check(session_id: str | None = None) -> dict[str, Any]:
+    """
+    Check the health status of the MCP server and IBKR connection.
+
+    Verifies that the server is running and can connect to IBKR.
+
+    Args:
+        session_id: Optional session ID to check specific session health
+
+    Returns:
+        Dictionary containing health status information
+    """
+    import datetime
 
     health_info = {
         "server": "healthy",
-        "timestamp": __import__("datetime").datetime.now().isoformat(),
+        "timestamp": datetime.datetime.now().isoformat(),
         "total_sessions": len(session_manager.sessions),
     }
 
@@ -500,9 +256,7 @@ async def tool_health_check(arguments: Dict[str, Any]) -> Dict[str, Any]:
         if session:
             health_info["session"] = {
                 "valid": True,
-                "connected": (
-                    session.client.is_connected if session.client else False
-                ),
+                "connected": session.client.is_connected if session.client else False,
             }
         else:
             health_info["session"] = {"valid": False}
@@ -520,23 +274,19 @@ async def tool_health_check(arguments: Dict[str, Any]) -> Dict[str, Any]:
             f"Session Connected: {health_info['session'].get('connected', 'N/A')}\n"
         )
 
-    return {
-        "content": [{"type": "text", "text": summary}],
-        "health": health_info,
-    }
+    health_info["message"] = summary
+    return health_info
+
+
+# ============================================================================
+# Server Entry Point
+# ============================================================================
 
 
 def main() -> None:
     """Run the MCP server."""
-    import uvicorn
-
     logger.info(f"Starting server on {settings.host}:{settings.port}")
-    uvicorn.run(
-        "mcp_ibkr_options.server:app",
-        host=settings.host,
-        port=settings.port,
-        log_level=settings.log_level.lower(),
-    )
+    mcp.run(host=settings.host, port=settings.port, log_level=settings.log_level.lower())
 
 
 if __name__ == "__main__":

@@ -1,209 +1,130 @@
-"""Tests for MCP server endpoints."""
+"""Tests for MCP server endpoints using FastMCP."""
 
 import pytest
-from fastapi.testclient import TestClient
 
-from mcp_ibkr_options.server import app
-
-
-@pytest.fixture
-def client():
-    """Create a test client."""
-    return TestClient(app)
+from mcp_ibkr_options.server import mcp
 
 
-def test_root_endpoint(client):
-    """Test root endpoint returns server info."""
-    response = client.get("/")
-    assert response.status_code == 200
-
-    data = response.json()
-    assert data["name"] == "MCP IBKR Options"
-    assert "version" in data
-    assert data["protocol"] == "mcp/http"
-
-
-def test_health_endpoint(client):
-    """Test health check endpoint."""
-    response = client.get("/health")
-    assert response.status_code == 200
-
-    data = response.json()
-    assert data["status"] == "healthy"
-    assert "timestamp" in data
-    assert "sessions" in data
-
-
-def test_mcp_tools_list(client):
-    """Test MCP tools/list endpoint."""
-    response = client.post(
-        "/mcp",
-        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
-    )
-    assert response.status_code == 200
-
-    data = response.json()
-    assert data["jsonrpc"] == "2.0"
-    assert data["id"] == 1
-    assert "result" in data
-    assert "tools" in data["result"]
-
-    tools = data["result"]["tools"]
-    tool_names = [t["name"] for t in tools]
-
-    assert "create_session" in tool_names
-    assert "delete_session" in tool_names
-    assert "get_underlying_price" in tool_names
-    assert "fetch_option_chain" in tool_names
-    assert "get_session_stats" in tool_names
-    assert "health_check" in tool_names
-
-
-def test_mcp_invalid_method(client):
-    """Test MCP endpoint with invalid method."""
-    response = client.post(
-        "/mcp",
-        json={"jsonrpc": "2.0", "id": 1, "method": "invalid/method", "params": {}},
-    )
-    assert response.status_code == 404
-
-    data = response.json()
-    assert "error" in data
-    assert data["error"]["code"] == -32601
-
-
-def test_create_session_tool(client):
+@pytest.mark.asyncio
+async def test_create_session_tool():
     """Test create_session tool."""
-    response = client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": "create_session", "arguments": {}},
-        },
-    )
-    assert response.status_code == 200
+    result = await mcp.call_tool("create_session", {})
 
-    data = response.json()
-    assert data["jsonrpc"] == "2.0"
-    assert "result" in data
-    assert "session_id" in data["result"]
-    assert "content" in data["result"]
+    assert "session_id" in result
+    assert "message" in result
+    assert isinstance(result["session_id"], str)
+    assert len(result["session_id"]) > 0
 
 
-def test_get_session_stats_tool(client):
+@pytest.mark.asyncio
+async def test_get_session_stats_tool():
     """Test get_session_stats tool."""
-    response = client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": "get_session_stats", "arguments": {}},
-        },
-    )
-    assert response.status_code == 200
+    result = await mcp.call_tool("get_session_stats", {})
 
-    data = response.json()
-    assert data["jsonrpc"] == "2.0"
-    assert "result" in data
-    assert "stats" in data["result"]
+    assert "total_sessions" in result
+    assert "sessions" in result
+    assert "message" in result
+    assert isinstance(result["total_sessions"], int)
 
 
-def test_health_check_tool(client):
-    """Test health_check tool."""
-    response = client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": "health_check", "arguments": {}},
-        },
-    )
-    assert response.status_code == 200
+@pytest.mark.asyncio
+async def test_health_check_tool():
+    """Test health_check tool without session."""
+    result = await mcp.call_tool("health_check", {})
 
-    data = response.json()
-    assert data["jsonrpc"] == "2.0"
-    assert "result" in data
-    assert "health" in data["result"]
+    assert "server" in result
+    assert result["server"] == "healthy"
+    assert "timestamp" in result
+    assert "total_sessions" in result
+    assert "message" in result
 
 
-def test_delete_session_tool_with_invalid_session(client):
+@pytest.mark.asyncio
+async def test_health_check_tool_with_invalid_session():
+    """Test health_check tool with invalid session."""
+    result = await mcp.call_tool("health_check", {"session_id": "invalid-session-id"})
+
+    assert "server" in result
+    assert "session" in result
+    assert result["session"]["valid"] is False
+
+
+@pytest.mark.asyncio
+async def test_delete_session_tool_with_invalid_session():
     """Test delete_session with invalid session ID."""
-    response = client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "delete_session",
-                "arguments": {"session_id": "invalid-session-id"},
-            },
-        },
-    )
-    assert response.status_code == 200
+    result = await mcp.call_tool("delete_session", {"session_id": "invalid-session-id"})
 
-    data = response.json()
-    assert "result" in data
-    assert "content" in data["result"]
+    assert "success" in result
+    assert result["success"] is False
+    assert "message" in result
 
 
-def test_unknown_tool(client):
-    """Test calling an unknown tool."""
-    response = client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": "unknown_tool", "arguments": {}},
-        },
-    )
-    assert response.status_code == 200
-
-    data = response.json()
-    assert "result" in data
-    assert data["result"]["isError"] is True
-
-
-def test_session_lifecycle(client):
+@pytest.mark.asyncio
+async def test_session_lifecycle():
     """Test complete session lifecycle: create, use, delete."""
     # Create session
-    create_response = client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": "create_session", "arguments": {}},
-        },
-    )
-    assert create_response.status_code == 200
-    session_id = create_response.json()["result"]["session_id"]
+    create_result = await mcp.call_tool("create_session", {})
+    assert "session_id" in create_result
+    session_id = create_result["session_id"]
 
     # Check health with session
-    health_response = client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/call",
-            "params": {"name": "health_check", "arguments": {"session_id": session_id}},
-        },
-    )
-    assert health_response.status_code == 200
+    health_result = await mcp.call_tool("health_check", {"session_id": session_id})
+    assert "session" in health_result
+    assert health_result["session"]["valid"] is True
 
     # Delete session
-    delete_response = client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0",
-            "id": 3,
-            "method": "tools/call",
-            "params": {"name": "delete_session", "arguments": {"session_id": session_id}},
-        },
-    )
-    assert delete_response.status_code == 200
+    delete_result = await mcp.call_tool("delete_session", {"session_id": session_id})
+    assert delete_result["success"] is True
+
+    # Verify session is gone
+    health_after_delete = await mcp.call_tool("health_check", {"session_id": session_id})
+    assert health_after_delete["session"]["valid"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_underlying_price_without_session():
+    """Test get_underlying_price with invalid session raises error."""
+    with pytest.raises(ValueError, match="Invalid or expired session"):
+        await mcp.call_tool(
+            "get_underlying_price", {"session_id": "invalid", "symbol": "SPY"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_option_chain_without_session():
+    """Test fetch_option_chain with invalid session raises error."""
+    with pytest.raises(ValueError, match="Invalid or expired session"):
+        await mcp.call_tool(
+            "fetch_option_chain", {"session_id": "invalid", "symbol": "SPY"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_list_tools():
+    """Test that all expected tools are registered."""
+    tools = mcp.list_tools()
+    tool_names = [tool["name"] for tool in tools]
+
+    expected_tools = [
+        "create_session",
+        "delete_session",
+        "get_underlying_price",
+        "fetch_option_chain",
+        "get_session_stats",
+        "health_check",
+    ]
+
+    for expected_tool in expected_tools:
+        assert expected_tool in tool_names, f"Tool {expected_tool} not found"
+
+
+@pytest.mark.asyncio
+async def test_tool_schemas():
+    """Test that all tools have proper schemas."""
+    tools = mcp.list_tools()
+
+    for tool in tools:
+        assert "name" in tool
+        assert "description" in tool
+        assert "inputSchema" in tool
+        assert tool["description"], f"Tool {tool['name']} has empty description"

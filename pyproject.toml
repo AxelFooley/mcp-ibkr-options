@@ -23,8 +23,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "fastapi>=0.109.0",
-    "uvicorn[standard]>=0.27.0",
+    "fastmcp>=0.2.0",
     "ib-insync>=0.9.86",
     "pandas>=2.2.0",
     "yfinance>=0.2.35",
@@ -101,5 +100,6 @@ strict_equality = true
 module = [
     "ib_insync.*",
     "yfinance.*",
+    "fastmcp.*",
 ]
 ignore_missing_imports = true
