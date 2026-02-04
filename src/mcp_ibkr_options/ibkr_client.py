@@ -101,9 +101,8 @@ class IBKRClient:
                 price = ticker.last
             if not price or price != price:
                 price = ticker.close
-            if not price or price != price:
-                if ticker.bid > 0 and ticker.ask > 0:
-                    price = (ticker.bid + ticker.ask) / 2
+            if (not price or price != price) and ticker.bid > 0 and ticker.ask > 0:
+                price = (ticker.bid + ticker.ask) / 2
 
             if price and price == price:  # Valid number
                 logger.debug(f"Got price from IB: ${price:.2f}")

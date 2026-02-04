@@ -363,12 +363,13 @@ spec:
 │   MCP Client    │
 │  (AI Agent)     │
 └────────┬────────┘
-         │ HTTP/SSE
+         │ Streamable HTTP
          │
 ┌────────▼────────────────────┐
-│   FastAPI Server            │
+│   FastMCP Server            │
 │  ┌──────────────────────┐   │
-│  │  MCP Protocol Layer  │   │
+│  │  @mcp.tool()         │   │
+│  │  Decorators          │   │
 │  └──────────┬───────────┘   │
 │             │                │
 │  ┌──────────▼───────────┐   │
@@ -456,7 +457,7 @@ Contributions are welcome! Please:
 
 ## Acknowledgments
 
-- Built with [FastAPI](https://fastapi.tiangolo.com/)
+- Built with [FastMCP](https://github.com/jlowin/fastmcp) - Purpose-built MCP server framework
 - IBKR integration via [ib_insync](https://github.com/erdewit/ib_insync)
 - MCP protocol implementation based on [Model Context Protocol](https://modelcontextprotocol.io/)
 

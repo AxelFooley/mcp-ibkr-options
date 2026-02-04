@@ -1,10 +1,10 @@
 """Session manager for handling IBKR connections with automatic cleanup."""
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict
 
 from .config import settings
 from .ibkr_client import IBKRClient
@@ -66,7 +66,7 @@ class SessionManager:
 
     def __init__(self) -> None:
         """Initialize the session manager."""
-        self.sessions: Dict[str, Session] = {}
+        self.sessions: dict[str, Session] = {}
         self._cleanup_task: asyncio.Task | None = None
         self._running = False
 
@@ -85,10 +85,8 @@ class SessionManager:
 
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
         # Clean up all sessions
         for session in list(self.sessions.values()):

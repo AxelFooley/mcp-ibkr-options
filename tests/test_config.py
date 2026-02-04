@@ -1,9 +1,5 @@
 """Tests for configuration management."""
 
-import os
-
-import pytest
-
 from mcp_ibkr_options.config import Settings
 
 
