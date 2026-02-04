@@ -11,8 +11,9 @@ RUN apt-get update && \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy dependency files
+# Copy dependency files and source code
 COPY pyproject.toml ./
+COPY src/ ./src/
 
 # Install dependencies to a local directory
 RUN pip install --no-cache-dir --user -e .
