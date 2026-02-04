@@ -48,7 +48,9 @@ async def test_health_check_tool_with_invalid_session(client):
     result = await client.call_tool("health_check", {"session_id": "invalid-session-id"})
     content = result.content[0].text
 
-    assert "invalid" in content.lower() or "expired" in content.lower() or "false" in content.lower()
+    assert (
+        "invalid" in content.lower() or "expired" in content.lower() or "false" in content.lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -57,7 +59,9 @@ async def test_delete_session_tool_with_invalid_session(client):
     result = await client.call_tool("delete_session", {"session_id": "invalid-session-id"})
     content = result.content[0].text
 
-    assert "invalid" in content.lower() or "not found" in content.lower() or "false" in content.lower()
+    assert (
+        "invalid" in content.lower() or "not found" in content.lower() or "false" in content.lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -71,7 +75,8 @@ async def test_session_lifecycle(client):
     # Extract session_id from content - this is a simplified approach
     # In practice, you'd parse the actual response format
     import re
-    match = re.search(r'session[_\s]+id[:\s]+([a-f0-9\-]+)', create_content, re.IGNORECASE)
+
+    match = re.search(r"session[_\s]+id[:\s]+([a-f0-9\-]+)", create_content, re.IGNORECASE)
     if match:
         session_id = match.group(1)
 
