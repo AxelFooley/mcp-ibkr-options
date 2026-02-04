@@ -1,7 +1,8 @@
 """MCP server for IBKR option chain data fetching using FastMCP."""
 
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastmcp import FastMCP
@@ -16,27 +17,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize FastMCP server
-mcp = FastMCP(
-    "MCP IBKR Options",
-    version="0.1.0",
-    description="MCP server for fetching Interactive Brokers option chain data",
-)
-
 
 # ============================================================================
 # Lifecycle Management
 # ============================================================================
 
 
-@mcp.lifespan
-async def lifespan() -> AsyncGenerator[None, None]:
+@asynccontextmanager
+async def app_lifespan(_server: FastMCP) -> AsyncIterator[None]:
     """Manage server lifecycle."""
     logger.info("Starting MCP IBKR Options server")
     await session_manager.start()
-    yield
-    logger.info("Shutting down MCP IBKR Options server")
-    await session_manager.stop()
+    try:
+        yield
+    finally:
+        logger.info("Shutting down MCP IBKR Options server")
+        await session_manager.stop()
+
+
+# Initialize FastMCP server
+mcp = FastMCP("MCP IBKR Options", lifespan=app_lifespan)
 
 
 # ============================================================================
