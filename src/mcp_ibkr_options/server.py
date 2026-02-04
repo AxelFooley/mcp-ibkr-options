@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="MCP IBKR Options",
-    description="MCP server for fetching Interactive Brokers option chain data",
+    description="MCP server for fetching Interactive Brokers option chain data via streamable HTTP",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -201,7 +201,11 @@ async def root() -> Dict[str, str]:
         "name": "MCP IBKR Options",
         "version": "0.1.0",
         "description": "MCP server for fetching Interactive Brokers option chain data",
-        "protocol": "mcp/http",
+        "protocol": "streamable-http",
+        "endpoints": {
+            "/mcp": "Main MCP endpoint (supports streaming via Accept: text/event-stream or x-mcp-stream: true)",
+            "/health": "Health check endpoint",
+        }
     }
 
 
@@ -216,13 +220,23 @@ async def health() -> Dict[str, Any]:
 
 
 @app.post("/mcp")
-async def mcp_endpoint(request: Request) -> JSONResponse:
-    """Main MCP endpoint for JSON-RPC requests."""
+async def mcp_endpoint(request: Request) -> JSONResponse | StreamingResponse:
+    """
+    Main MCP endpoint supporting both regular and streamable HTTP protocol.
+
+    For streaming responses, returns newline-delimited JSON messages.
+    For non-streaming responses, returns a single JSON object.
+    """
     try:
         body = await request.json()
         mcp_request = MCPRequest(**body)
 
         logger.debug(f"Received MCP request: {mcp_request.method}")
+
+        # Check if client wants streaming response
+        accept_header = request.headers.get("accept", "")
+        is_streaming = "text/event-stream" in accept_header or \
+                       request.headers.get("x-mcp-stream") == "true"
 
         # Route to appropriate handler
         if mcp_request.method == "tools/list":
@@ -230,69 +244,56 @@ async def mcp_endpoint(request: Request) -> JSONResponse:
         elif mcp_request.method == "tools/call":
             result = await handle_tool_call(mcp_request.params)
         else:
-            return JSONResponse(
-                content=MCPResponse(
-                    jsonrpc="2.0",
-                    id=mcp_request.id,
-                    error=MCPError(
-                        code=-32601,
-                        message=f"Method not found: {mcp_request.method}",
-                    ).model_dump(),
+            error_response = MCPResponse(
+                jsonrpc="2.0",
+                id=mcp_request.id,
+                error=MCPError(
+                    code=-32601,
+                    message=f"Method not found: {mcp_request.method}",
                 ).model_dump(),
-                status_code=404,
             )
+            if is_streaming:
+                async def error_stream():
+                    yield json.dumps(error_response.model_dump()) + "\n"
+                return StreamingResponse(
+                    error_stream(),
+                    media_type="application/x-ndjson",
+                    status_code=404,
+                )
+            else:
+                return JSONResponse(
+                    content=error_response.model_dump(),
+                    status_code=404,
+                )
 
         response = MCPResponse(jsonrpc="2.0", id=mcp_request.id, result=result)
-        return JSONResponse(content=response.model_dump())
+
+        # Return streaming or regular response based on client preference
+        if is_streaming:
+            async def response_stream():
+                # Send the response as newline-delimited JSON
+                yield json.dumps(response.model_dump()) + "\n"
+
+            return StreamingResponse(
+                response_stream(),
+                media_type="application/x-ndjson",
+            )
+        else:
+            return JSONResponse(content=response.model_dump())
 
     except Exception as e:
         logger.error(f"Error handling MCP request: {e}", exc_info=True)
-        return JSONResponse(
-            content=MCPResponse(
-                jsonrpc="2.0",
-                id=getattr(body, "id", 0) if "body" in locals() else 0,
-                error=MCPError(code=-32603, message=str(e)).model_dump(),
-            ).model_dump(),
-            status_code=500,
+        error_response = MCPResponse(
+            jsonrpc="2.0",
+            id=getattr(body, "id", 0) if "body" in locals() else 0,
+            error=MCPError(code=-32603, message=str(e)).model_dump(),
         )
 
-
-@app.post("/sse")
-async def sse_endpoint(request: Request) -> StreamingResponse:
-    """SSE endpoint for streaming MCP responses."""
-
-    async def event_generator():
-        try:
-            body = await request.json()
-            mcp_request = MCPRequest(**body)
-
-            # For SSE, we'll send the response as an event
-            if mcp_request.method == "tools/call":
-                result = await handle_tool_call(mcp_request.params)
-                response = MCPResponse(jsonrpc="2.0", id=mcp_request.id, result=result)
-                yield f"data: {json.dumps(response.model_dump())}\n\n"
-            else:
-                error_response = MCPResponse(
-                    jsonrpc="2.0",
-                    id=mcp_request.id,
-                    error=MCPError(
-                        code=-32601, message=f"Method not supported via SSE"
-                    ).model_dump(),
-                )
-                yield f"data: {json.dumps(error_response.model_dump())}\n\n"
-
-        except Exception as e:
-            logger.error(f"Error in SSE stream: {e}", exc_info=True)
-            error_response = MCPResponse(
-                jsonrpc="2.0",
-                id=0,
-                error=MCPError(code=-32603, message=str(e)).model_dump(),
-            )
-            yield f"data: {json.dumps(error_response.model_dump())}\n\n"
-
-    return StreamingResponse(
-        event_generator(), media_type="text/event-stream"
-    )
+        # For errors, always return non-streaming response
+        return JSONResponse(
+            content=error_response.model_dump(),
+            status_code=500,
+        )
 
 
 # ============================================================================

@@ -9,7 +9,7 @@ A production-ready Model Context Protocol (MCP) server for fetching real-time op
 
 ## Features
 
-- 🔄 **MCP Protocol Compliant** - Full support for Model Context Protocol over HTTP with SSE streaming
+- 🔄 **MCP Protocol Compliant** - Full support for streamable HTTP transport with newline-delimited JSON
 - 📊 **Real-time Option Data** - Fetch live option chains with Greeks (delta, gamma, theta, vega, IV)
 - 🔐 **Session Management** - Automatic session cleanup and connection pooling
 - 🐳 **Docker Ready** - Multi-stage Dockerfile optimized for production
@@ -121,9 +121,22 @@ Check server and connection health.
 **Parameters:**
 - `session_id` (optional): Session ID to check specific session health
 
+## Protocol Support
+
+The server supports the MCP streamable HTTP transport protocol:
+
+- **Regular HTTP**: Standard JSON-RPC requests/responses
+- **Streaming HTTP**: Newline-delimited JSON for streaming responses
+
+To enable streaming, include one of these headers:
+- `Accept: text/event-stream`
+- `x-mcp-stream: true`
+
+Streaming responses use `application/x-ndjson` (newline-delimited JSON) format.
+
 ## Usage Example
 
-### Using MCP Client
+### Using MCP Client (Regular HTTP)
 
 ```python
 import httpx
@@ -180,6 +193,36 @@ httpx.post(
         }
     }
 )
+```
+
+### Using Streaming HTTP
+
+```python
+import httpx
+import json
+
+base_url = "http://localhost:8000"
+
+# Create session with streaming
+with httpx.stream(
+    "POST",
+    f"{base_url}/mcp",
+    json={
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "create_session",
+            "arguments": {}
+        }
+    },
+    headers={"x-mcp-stream": "true"}
+) as response:
+    for line in response.iter_lines():
+        if line:
+            data = json.loads(line)
+            session_id = data["result"]["session_id"]
+            print(f"Session created: {session_id}")
 ```
 
 ### Using curl
