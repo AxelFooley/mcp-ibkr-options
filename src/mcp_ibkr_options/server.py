@@ -285,7 +285,12 @@ async def health_check(session_id: str | None = None) -> dict[str, Any]:
 def main() -> None:
     """Run the MCP server."""
     logger.info(f"Starting server on {settings.host}:{settings.port}")
-    mcp.run(host=settings.host, port=settings.port, log_level=settings.log_level.lower())
+    mcp.run(
+        transport="http",
+        host=settings.host,
+        port=settings.port,
+        log_level=settings.log_level.lower(),
+    )
 
 
 if __name__ == "__main__":
