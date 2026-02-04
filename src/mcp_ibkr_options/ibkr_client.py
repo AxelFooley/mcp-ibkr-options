@@ -203,11 +203,33 @@ class IBKRClient:
         if not chains:
             raise ValueError(f"No option chains found for {symbol}")
 
-        chain = chains[0]
-        logger.debug(
-            f"Using chain: {chain.tradingClass} on {chain.exchange}, "
-            f"{len(chain.expirations)} expirations, {len(chain.strikes)} strikes"
+        # Select the best chain - prefer one that matches the symbol,
+        # otherwise select the one with most strikes and expirations
+        chain = None
+        best_score = -1
+
+        for c in chains:
+            # Prefer chains where trading class matches symbol (e.g., MSFT not 2MSFT)
+            score = len(c.strikes) * len(c.expirations)
+            if c.tradingClass == symbol.upper():
+                score *= 10  # Strong preference for matching trading class
+
+            if score > best_score:
+                best_score = score
+                chain = c
+
+        if chain is None:
+            chain = chains[0]  # Fallback to first chain if something went wrong
+
+        logger.info(
+            f"Selected chain: {chain.tradingClass} on {chain.exchange} "
+            f"({len(chain.expirations)} expirations, {len(chain.strikes)} strikes)"
         )
+        if len(chains) > 1:
+            logger.info(
+                f"Note: {len(chains)} chains available. Others: "
+                f"{', '.join(c.tradingClass for c in chains if c != chain)}"
+            )
 
         # Filter strikes
         if underlying_price:

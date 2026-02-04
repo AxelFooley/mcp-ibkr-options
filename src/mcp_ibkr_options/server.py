@@ -1,7 +1,8 @@
 """MCP server for IBKR option chain data fetching using FastMCP."""
 
 import logging
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from fastmcp import FastMCP
 
