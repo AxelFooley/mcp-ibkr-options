@@ -26,7 +26,7 @@ class IBKRClient:
         """Check if the client is connected."""
         return self._connected and self.ib.isConnected()
 
-    def connect(self) -> None:
+    async def connect(self) -> None:
         """Connect to IB Gateway/TWS."""
         if self.is_connected:
             logger.debug("Already connected to IBKR")
@@ -37,7 +37,7 @@ class IBKRClient:
                 f"Connecting to IBKR at {settings.ibkr_host}:{settings.ibkr_port} "
                 f"with client ID {settings.ibkr_client_id}"
             )
-            self.ib.connect(
+            await self.ib.connectAsync(
                 host=settings.ibkr_host,
                 port=settings.ibkr_port,
                 clientId=settings.ibkr_client_id,

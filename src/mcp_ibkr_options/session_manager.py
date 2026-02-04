@@ -31,21 +31,21 @@ class Session:
         timeout_delta = timedelta(minutes=timeout_minutes)
         return datetime.now() - self.last_accessed > timeout_delta
 
-    def get_or_create_client(self) -> IBKRClient:
+    async def get_or_create_client(self) -> IBKRClient:
         """Get existing client or create a new one."""
         if self.client is None:
             logger.info(f"Creating new IBKR client for session {self.session_id}")
             self.client = IBKRClient()
-            self.client.connect()
+            await self.client.connect()
         elif not self.client.is_connected:
             logger.warning(f"Client disconnected for session {self.session_id}, reconnecting")
             try:
-                self.client.connect()
+                await self.client.connect()
             except Exception as e:
                 logger.error(f"Failed to reconnect: {e}")
                 # Create new client if reconnection fails
                 self.client = IBKRClient()
-                self.client.connect()
+                await self.client.connect()
 
         self.touch()
         return self.client
