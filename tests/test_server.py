@@ -85,18 +85,14 @@ async def test_session_lifecycle():
 async def test_get_underlying_price_without_session():
     """Test get_underlying_price with invalid session raises error."""
     with pytest.raises(ValueError, match="Invalid or expired session"):
-        await mcp.call_tool(
-            "get_underlying_price", {"session_id": "invalid", "symbol": "SPY"}
-        )
+        await mcp.call_tool("get_underlying_price", {"session_id": "invalid", "symbol": "SPY"})
 
 
 @pytest.mark.asyncio
 async def test_fetch_option_chain_without_session():
     """Test fetch_option_chain with invalid session raises error."""
     with pytest.raises(ValueError, match="Invalid or expired session"):
-        await mcp.call_tool(
-            "fetch_option_chain", {"session_id": "invalid", "symbol": "SPY"}
-        )
+        await mcp.call_tool("fetch_option_chain", {"session_id": "invalid", "symbol": "SPY"})
 
 
 @pytest.mark.asyncio

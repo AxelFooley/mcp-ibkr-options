@@ -1,7 +1,7 @@
 """MCP server for IBKR option chain data fetching using FastMCP."""
 
 import logging
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from fastmcp import FastMCP
 
@@ -29,7 +29,7 @@ mcp = FastMCP(
 
 
 @mcp.lifespan
-async def lifespan():
+async def lifespan() -> AsyncGenerator[None, None]:
     """Manage server lifecycle."""
     logger.info("Starting MCP IBKR Options server")
     await session_manager.start()
@@ -114,9 +114,7 @@ async def get_underlying_price(session_id: str, symbol: str) -> dict[str, Any]:
     """
     session = session_manager.get_session(session_id)
     if not session:
-        raise ValueError(
-            f"Invalid or expired session: {session_id}. Create a new session first."
-        )
+        raise ValueError(f"Invalid or expired session: {session_id}. Create a new session first.")
 
     client = session.get_or_create_client()
     price = client.get_underlying_price(symbol)
@@ -165,9 +163,7 @@ async def fetch_option_chain(
     """
     session = session_manager.get_session(session_id)
     if not session:
-        raise ValueError(
-            f"Invalid or expired session: {session_id}. Create a new session first."
-        )
+        raise ValueError(f"Invalid or expired session: {session_id}. Create a new session first.")
 
     client = session.get_or_create_client()
     data = client.fetch_option_chain(
@@ -269,10 +265,12 @@ async def health_check(session_id: str | None = None) -> dict[str, Any]:
     )
 
     if "session" in health_info:
-        summary += (
-            f"Session Valid: {health_info['session']['valid']}\n"
-            f"Session Connected: {health_info['session'].get('connected', 'N/A')}\n"
-        )
+        session_info = health_info["session"]
+        if isinstance(session_info, dict):
+            summary += (
+                f"Session Valid: {session_info['valid']}\n"
+                f"Session Connected: {session_info.get('connected', 'N/A')}\n"
+            )
 
     health_info["message"] = summary
     return health_info

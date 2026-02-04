@@ -26,9 +26,7 @@ class Settings(BaseSettings):
     ibkr_timeout: int = Field(default=30, description="IB connection timeout in seconds")
 
     # Session management
-    session_timeout_minutes: int = Field(
-        default=5, description="Session timeout in minutes"
-    )
+    session_timeout_minutes: int = Field(default=5, description="Session timeout in minutes")
     session_cleanup_interval_seconds: int = Field(
         default=60, description="How often to check for stale sessions"
     )

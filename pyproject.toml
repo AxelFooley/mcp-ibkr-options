@@ -103,5 +103,8 @@ module = [
     "ib_insync.*",
     "yfinance.*",
     "fastmcp.*",
+    "pandas.*",
+    "pydantic.*",
+    "pydantic_settings.*",
 ]
 ignore_missing_imports = true

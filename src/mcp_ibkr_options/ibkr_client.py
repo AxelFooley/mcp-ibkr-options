@@ -115,17 +115,10 @@ class IBKRClient:
             logger.error(f"Error fetching underlying price: {e}")
             return None
 
-    def _extract_ticker_data(
-        self, ticker: Any, underlying_price: float | None
-    ) -> dict[str, Any]:
+    def _extract_ticker_data(self, ticker: Any, underlying_price: float | None) -> dict[str, Any]:
         """Extract data from a ticker object."""
         contract = ticker.contract
-        greeks = (
-            ticker.modelGreeks
-            or ticker.bidGreeks
-            or ticker.askGreeks
-            or ticker.lastGreeks
-        )
+        greeks = ticker.modelGreeks or ticker.bidGreeks or ticker.askGreeks or ticker.lastGreeks
 
         data: dict[str, Any] = {
             "symbol": contract.symbol,

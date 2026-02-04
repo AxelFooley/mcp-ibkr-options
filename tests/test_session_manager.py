@@ -37,6 +37,7 @@ def test_session_touch():
 
     # Wait a bit
     import time
+
     time.sleep(0.1)
 
     session.touch()
@@ -84,9 +85,7 @@ def test_get_expired_session(session_manager):
     session_id = session_manager.create_session()
 
     # Expire the session
-    session_manager.sessions[session_id].last_accessed = datetime.now() - timedelta(
-        minutes=10
-    )
+    session_manager.sessions[session_id].last_accessed = datetime.now() - timedelta(minutes=10)
 
     # Getting it should return None and remove it
     result = session_manager.get_session(session_id)
@@ -123,9 +122,7 @@ async def test_cleanup_loop_removes_expired_sessions(session_manager):
     """Test that cleanup loop removes expired sessions."""
     # Create a session and immediately expire it
     session_id = session_manager.create_session()
-    session_manager.sessions[session_id].last_accessed = datetime.now() - timedelta(
-        minutes=10
-    )
+    session_manager.sessions[session_id].last_accessed = datetime.now() - timedelta(minutes=10)
 
     # Mock the cleanup interval to be very short
     with patch("mcp_ibkr_options.session_manager.settings") as mock_settings:

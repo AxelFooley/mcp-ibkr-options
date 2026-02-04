@@ -166,9 +166,7 @@ class SessionManager:
                     "created_at": session.created_at.isoformat(),
                     "last_accessed": session.last_accessed.isoformat(),
                     "has_client": session.client is not None,
-                    "is_connected": (
-                        session.client.is_connected if session.client else False
-                    ),
+                    "is_connected": (session.client.is_connected if session.client else False),
                 }
                 for session in self.sessions.values()
             ],
