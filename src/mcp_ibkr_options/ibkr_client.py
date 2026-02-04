@@ -197,7 +197,7 @@ class IBKRClient:
         underlying_price = await self.get_underlying_price(symbol)
 
         # Request option chain parameters
-        chains = self.ib.reqSecDefOptParams(
+        chains = await self.ib.reqSecDefOptParamsAsync(
             underlying.symbol, "", underlying.secType, underlying.conId
         )
 
