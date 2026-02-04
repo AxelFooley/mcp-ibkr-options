@@ -77,7 +77,7 @@ class IBKRClient:
             logger.debug(f"Failed to get price from yfinance: {e}")
         return None
 
-    def get_underlying_price(self, symbol: str) -> float | None:
+    async def get_underlying_price(self, symbol: str) -> float | None:
         """Get the current price of the underlying symbol."""
         if not self.is_connected:
             raise RuntimeError("Not connected to IBKR")
@@ -92,8 +92,9 @@ class IBKRClient:
         try:
             logger.debug("Trying to get price from IB data feed")
             underlying = self._create_underlying_contract(symbol)
-            self.ib.qualifyContracts(underlying)
-            [ticker] = self.ib.reqTickers(underlying)
+            await self.ib.qualifyContractsAsync(underlying)
+            ticker = await self.ib.reqTickersAsync(underlying)
+            ticker = ticker[0]
 
             # Try multiple methods to get price
             price = ticker.marketPrice()
@@ -158,7 +159,7 @@ class IBKRClient:
 
         return data
 
-    def fetch_option_chain(
+    async def fetch_option_chain(
         self,
         symbol: str,
         strike_count: int | None = None,
@@ -190,10 +191,10 @@ class IBKRClient:
 
         # Get underlying contract
         underlying = self._create_underlying_contract(symbol)
-        self.ib.qualifyContracts(underlying)
+        await self.ib.qualifyContractsAsync(underlying)
 
         # Get current price
-        underlying_price = self.get_underlying_price(symbol)
+        underlying_price = await self.get_underlying_price(symbol)
 
         # Request option chain parameters
         chains = self.ib.reqSecDefOptParams(
@@ -309,7 +310,7 @@ class IBKRClient:
         qualified_contracts = []
         for contract in option_contracts:
             try:
-                qualified = self.ib.qualifyContracts(contract)
+                qualified = await self.ib.qualifyContractsAsync(contract)
                 if qualified:
                     qualified_contracts.extend(qualified)
             except Exception:
@@ -322,7 +323,7 @@ class IBKRClient:
 
         # Request market data
         logger.info(f"Fetching market data for {len(qualified_contracts)} contracts")
-        tickers = self.ib.reqTickers(*qualified_contracts)
+        tickers = await self.ib.reqTickersAsync(*qualified_contracts)
 
         # Extract data
         data_list = []

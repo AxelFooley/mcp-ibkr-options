@@ -118,7 +118,7 @@ async def get_underlying_price(session_id: str, symbol: str) -> dict[str, Any]:
         raise ValueError(f"Invalid or expired session: {session_id}. Create a new session first.")
 
     client = await session.get_or_create_client()
-    price = client.get_underlying_price(symbol)
+    price = await client.get_underlying_price(symbol)
 
     if price is None:
         raise ValueError(
@@ -167,7 +167,7 @@ async def fetch_option_chain(
         raise ValueError(f"Invalid or expired session: {session_id}. Create a new session first.")
 
     client = await session.get_or_create_client()
-    data = client.fetch_option_chain(
+    data = await client.fetch_option_chain(
         symbol=symbol,
         strike_count=strike_count,
         expiration_days=expiration_days,
