@@ -93,8 +93,8 @@ class IBKRClient:
             logger.debug("Trying to get price from IB data feed")
             underlying = self._create_underlying_contract(symbol)
             await self.ib.qualifyContractsAsync(underlying)
-            ticker = await self.ib.reqTickersAsync(underlying)
-            ticker = ticker[0]
+            tickers = await self.ib.reqTickersAsync(underlying)
+            ticker = tickers[0]
 
             # Try multiple methods to get price
             price = ticker.marketPrice()
