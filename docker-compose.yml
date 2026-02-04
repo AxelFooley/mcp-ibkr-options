@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  mcp-ibkr-options:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-ibkr-options
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      # MCP Server Configuration
+      - HOST=0.0.0.0
+      - PORT=8000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+      # IBKR Connection Settings
+      # Use host.docker.internal to connect to TWS/Gateway on host machine
+      - IBKR_HOST=${IBKR_HOST:-host.docker.internal}
+      - IBKR_PORT=${IBKR_PORT:-7496}
+      - IBKR_CLIENT_ID=${IBKR_CLIENT_ID:-1}
+      - IBKR_TIMEOUT=${IBKR_TIMEOUT:-30}
+
+      # Session Management
+      - SESSION_TIMEOUT_MINUTES=${SESSION_TIMEOUT_MINUTES:-5}
+      - SESSION_CLEANUP_INTERVAL_SECONDS=${SESSION_CLEANUP_INTERVAL_SECONDS:-60}
+
+      # Market Data Settings
+      - MARKET_DATA_TYPE=${MARKET_DATA_TYPE:-4}
+
+      # Default Option Chain Settings
+      - DEFAULT_STRIKE_COUNT=${DEFAULT_STRIKE_COUNT:-20}
+      - DEFAULT_STRIKE_RANGE_PCT=${DEFAULT_STRIKE_RANGE_PCT:-20.0}
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+    # Uncomment to use .env file
+    # env_file:
+    #   - .env
